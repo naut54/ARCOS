@@ -182,11 +182,17 @@ class Router
         $match = $this->resolve($request);
 
         if ($match === null) {
-            return new DispatchResult($this->notFound(), skippedMandatory: []);
+            return new DispatchResult(
+                $this->notFound(),
+                skippedMandatory: $this->mandatoryMiddlewareForUnmatched($container),
+            );
         }
 
         if (isset($match['_error']) && $match['_error'] === 405) {
-            return new DispatchResult($this->methodNotAllowed(), skippedMandatory: []);
+            return new DispatchResult(
+                $this->methodNotAllowed(),
+                skippedMandatory: $this->mandatoryMiddlewareForUnmatched($container),
+            );
         }
 
         return $this->buildChainAndExecute($request, $match, $container);
@@ -455,6 +461,42 @@ class Router
         ));
     }
 
+    /**
+     * No route was matched (404) or the URI matched but the method didn't (405), so there is
+     * no chain to build. Mandatory middleware must still run — e.g. LoggerMiddleware must log
+     * every request, including ones that never reach a controller. Only global middleware and
+     * the active subdomain's group middleware are considered; there is no per-route middleware
+     * to include because no specific route was resolved.
+     */
+    private function mandatoryMiddlewareForUnmatched(Container $container): array
+    {
+        $links = $this->globalMiddleware;
+
+        if ($this->activeSubdomain !== null) {
+            $context = $this->subdomainContexts[$this->activeSubdomain];
+
+            foreach ($context->middlewareGroups as $groupName) {
+                if (!isset($this->groups[$groupName])) {
+                    continue;
+                }
+
+                foreach ($this->groups[$groupName]->links as $link) {
+                    $links[] = $link;
+                }
+            }
+        }
+
+        $instances = [];
+
+        foreach ($links as $link) {
+            if ($link->isMandatory) {
+                $instances[] = $container->make($link->middleware);
+            }
+        }
+
+        return $instances;
+    }
+
     private function resolveSkippedMandatory(array $links, array $executedClasses, Container $container): array
     {
         $skipped = [];
@@ -496,10 +538,13 @@ class Router
 
     private function checkDuplicates(array $incoming, array $existing, string $context): void
     {
-        $existingClasses = array_map(fn(MiddlewareLink $l) => $l->middleware, $existing);
+        // Accumulate as we go so duplicates *within* $incoming are caught too,
+        // not just duplicates of something already in $existing.
+        $seen = array_map(fn(MiddlewareLink $l) => $l->middleware, $existing);
 
         foreach ($incoming as $link) {
-            if (!in_array($link->middleware, $existingClasses, strict: true)) {
+            if (!in_array($link->middleware, $seen, strict: true)) {
+                $seen[] = $link->middleware;
                 continue;
             }
 
@@ -512,6 +557,8 @@ class Router
                     "Implement DuplicableInterface and return true from allowDuplicates() to allow this explicitly."
                 );
             }
+
+            $seen[] = $link->middleware;
         }
     }
 

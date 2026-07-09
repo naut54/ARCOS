@@ -62,11 +62,19 @@ class Request
 
     private static function parseBody(): array
     {
+        $method      = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
         $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
 
         if (str_contains($contentType, 'application/json')) {
             $raw = file_get_contents('php://input');
             return json_decode($raw, associative: true) ?? [];
+        }
+
+        // PHP only populates $_POST for POST requests. PUT/PATCH/DELETE with a
+        // form-urlencoded body must be parsed from the raw stream directly.
+        if ($method !== 'POST' && str_contains($contentType, 'application/x-www-form-urlencoded')) {
+            parse_str(file_get_contents('php://input'), $parsed);
+            return $parsed;
         }
 
         return $_POST;

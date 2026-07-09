@@ -34,11 +34,16 @@ class Response
     {
         http_response_code($this->status);
 
-        header('Content-Type: application/json');
-
         foreach ($this->headers as $name => $value) {
             header("$name: $value");
         }
+
+        // A 204 (or an explicit null body) must not emit a response body.
+        if ($this->status === 204 || $this->body === null) {
+            return;
+        }
+
+        header('Content-Type: application/json');
 
         echo json_encode($this->body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }

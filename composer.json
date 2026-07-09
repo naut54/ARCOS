@@ -8,15 +8,6 @@
   "require": {
     "php": ">=8.3"
   },
-  "require-dev": {
-    "pylon/arcos-cli": "*"
-  },
-  "repositories": [
-    {
-      "type": "path",
-      "url": "./cli"
-    }
-  ],
   "autoload": {
     "psr-4": {
       "Arcos\\": "src/",
