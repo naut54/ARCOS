@@ -16,12 +16,19 @@ class Request
 
     public static function fromGlobals(UriResolverInterface $uriResolver): static
     {
+        $method = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
+
         return new static(
-            method:  strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET'),
+            method:  $method,
             uri:     $uriResolver->resolve(),
             headers: getallheaders() ?: [],
             query:   $_GET,
-            body:    self::parseBody(),
+            body:    self::parseBody(
+                $method,
+                $_SERVER['CONTENT_TYPE'] ?? '',
+                fn() => file_get_contents('php://input'),
+                $_POST,
+            ),
         );
     }
 
@@ -60,23 +67,24 @@ class Request
         return $this->body[$key] ?? $this->query[$key] ?? $default;
     }
 
-    private static function parseBody(): array
+    /**
+     * Pure body-parsing logic, independent of superglobals so it can be
+     * unit-tested directly. $rawInput is lazy — only called if actually needed —
+     * so callers that don't need it (e.g. a plain POST) never touch php://input.
+     */
+    public static function parseBody(string $method, string $contentType, callable $rawInput, array $post): array
     {
-        $method      = strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET');
-        $contentType = $_SERVER['CONTENT_TYPE'] ?? '';
-
         if (str_contains($contentType, 'application/json')) {
-            $raw = file_get_contents('php://input');
-            return json_decode($raw, associative: true) ?? [];
+            return json_decode($rawInput(), associative: true) ?? [];
         }
 
         // PHP only populates $_POST for POST requests. PUT/PATCH/DELETE with a
         // form-urlencoded body must be parsed from the raw stream directly.
         if ($method !== 'POST' && str_contains($contentType, 'application/x-www-form-urlencoded')) {
-            parse_str(file_get_contents('php://input'), $parsed);
+            parse_str($rawInput(), $parsed);
             return $parsed;
         }
 
-        return $_POST;
+        return $post;
     }
 }

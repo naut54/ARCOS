@@ -63,14 +63,18 @@ class Router
                 continue;
             }
 
-            $resolver = new AutoResolver(
-                router:    $this,
-                namespace: $context->controllersNamespace,
-                basePath:  $basePath,
-                subdomain: $context->subdomain,
-            );
+            // add() requires currentSubdomain to be set, same as any route
+            // declared in routes/api.php — auto-resolved routes are no different.
+            $this->subdomain($context->subdomain, function (Router $router) use ($context, $basePath): void {
+                $resolver = new AutoResolver(
+                    router:    $router,
+                    namespace: $context->controllersNamespace,
+                    basePath:  $basePath,
+                    subdomain: $context->subdomain,
+                );
 
-            $resolver->resolve();
+                $resolver->resolve();
+            });
         }
     }
 

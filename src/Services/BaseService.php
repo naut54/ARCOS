@@ -59,7 +59,7 @@ abstract class BaseService
             ],
         ]);
 
-        $raw = @file_get_contents($url, context: $context);
+        $raw = $this->transport($url, $context);
 
         if ($raw === false) {
             return $this->down('Could not reach ' . $url);
@@ -72,6 +72,15 @@ abstract class BaseService
         }
 
         return $decoded;
+    }
+
+    /**
+     * The actual network call, isolated so tests can override it with a fake
+     * response instead of hitting a real host.
+     */
+    protected function transport(string $url, $context): string|false
+    {
+        return @file_get_contents($url, context: $context);
     }
 
     private function buildHeaders(array $headers): string
