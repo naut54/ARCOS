@@ -6,7 +6,10 @@ namespace Arcos\Core\Http;
 
 class Response
 {
-    private array $headers = [];
+    // protected, not private, so RawResponse (the single-JSON-output-point
+    // escape hatch -- see RawResponse's own doc comment) can emit them
+    // itself without a getter widening the public API.
+    protected array $headers = [];
 
     public function __construct(
         private readonly mixed $body,
